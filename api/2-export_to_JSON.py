@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 """
-Python script that gathers all employees' TODO lists
-and exports them to todo_all_employees.json.
+Python script that exports an employee's TODO list to a JSON file.
 """
 
 import json
@@ -9,60 +8,63 @@ import requests
 import sys
 
 
-def fetch_all_users():
-    """Fetch all users from the API."""
-    url = "https://jsonplaceholder.typicode.com/users"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching users: {e}", file=sys.stderr)
+def fetch_employee_data(employee_id):
+    """
+    Fetch employee info and their TODO list from the API.
+    """
+    base_url = "https://jsonplaceholder.typicode.com"
+    user_url = f"{base_url}/users/{employee_id}"
+    todos_url = f"{base_url}/todos?userId={employee_id}"
+
+    user_response = requests.get(user_url)
+    todos_response = requests.get(todos_url)
+
+    if user_response.status_code != 200:
+        print("Error: Employee not found.")
         sys.exit(1)
 
+    user_info = user_response.json()
+    todos_info = todos_response.json()
 
-def fetch_user_todos(user_id):
-    """Fetch TODOs for a specific user by ID."""
-    url = "https://jsonplaceholder.typicode.com/todos"
-    params = {'userId': user_id}
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching todos for user {user_id}: {e}",
-              file=sys.stderr)
-        return []
+    return user_info, todos_info
 
 
-def main():
-    """Gather all TODOs and export to JSON."""
-    all_users_data = {}
-
-    users = fetch_all_users()
-
-    for user in users:
-        user_id = str(user.get("id"))
-        username = user.get("username")
-        todos = fetch_user_todos(user_id)
-
-        all_users_data[user_id] = [
+def export_to_json(employee_id, username, todos):
+    """
+    Export all TODO list tasks to a JSON file named '<USER_ID>.json'.
+    Format:
+    { "USER_ID": [
+        {"task": "TASK_TITLE", "completed": TASK_COMPLETED_STATUS, "username": "USERNAME"},
+        ...
+    ]}
+    """
+    data = {
+        str(employee_id): [
             {
-                "username": username,
                 "task": task.get("title"),
-                "completed": task.get("completed")
+                "completed": task.get("completed"),
+                "username": username
             }
             for task in todos
         ]
+    }
 
-    filename = "todo_all_employees.json"
-    try:
-        with open(filename, "w", encoding="utf-8") as json_file:
-            json.dump(all_users_data, json_file, indent=4)
-    except IOError as e:
-        print(f"Error writing to file {filename}: {e}", file=sys.stderr)
-        sys.exit(1)
+    filename = f"{employee_id}.json"
+    with open(filename, "w", encoding="utf-8") as jsonfile:
+        json.dump(data, jsonfile)
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 2:
+        print("Usage: ./2-export_to_JSON.py <employee_id>")
+        sys.exit(1)
+
+    try:
+        employee_id = int(sys.argv[1])
+    except ValueError:
+        print("Error: Employee ID must be an integer.")
+        sys.exit(1)
+
+    user_info, todos_info = fetch_employee_data(employee_id)
+    username = user_info.get("username")
+    export_to_json(employee_id, username, todos_info)
