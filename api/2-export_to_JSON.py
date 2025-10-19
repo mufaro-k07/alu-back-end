@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """
-Python script that exports an employee's TODO list to a JSON file.
+Python script that gathers all employees' TODO lists
+and exports them to todo_all_employees.json.
 """
 
 import json
@@ -8,88 +9,60 @@ import requests
 import sys
 
 
-def fetch_employee_data(employee_id):
-    """
-    Fetch employee info and their TODO list from the API.
-
-    Args:
-        employee_id (int): The ID of the employee to query.
-
-    Returns:
-        tuple: (user_info: dict, todos_info: list)
-    """
-    base_url = "https://jsonplaceholder.typicode.com"
-    user_url = f"{base_url}/users/{employee_id}"
-    todos_url = f"{base_url}/todos"
-
+def fetch_all_users():
+    """Fetch all users from the API."""
+    url = "https://jsonplaceholder.typicode.com/users"
     try:
-        user_response = requests.get(user_url)
-        # Use 'params' argument for cleaner filtering (instead of ?userId=...)
-        todos_response = requests.get(todos_url,
-                                       params={'userId': employee_id})
-
-        # Raise HTTPError for bad responses (4xx or 5xx)
-        user_response.raise_for_status()
-        todos_response.raise_for_status()
-
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
     except requests.exceptions.RequestException as e:
-        # Handle connection errors or bad HTTP status codes
-        print(f"Error connecting to API: {e}", file=sys.stderr)
+        print(f"Error fetching users: {e}", file=sys.stderr)
         sys.exit(1)
 
-    user_info = user_response.json()
-    todos_info = todos_response.json()
 
-    # Check specifically if the employee ID resulted in a valid user
-    if not user_info.get('id'):
-        print(f"Error: Employee with ID {employee_id} not found.",
+def fetch_user_todos(user_id):
+    """Fetch TODOs for a specific user by ID."""
+    url = "https://jsonplaceholder.typicode.com/todos"
+    params = {'userId': user_id}
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching todos for user {user_id}: {e}",
               file=sys.stderr)
-        sys.exit(1)
-
-    return user_info, todos_info
+        return []
 
 
-def export_to_json(employee_id, username, todos):
-    """
-    Export all TODO list tasks to a JSON file named '<USER_ID>.json'.
+def main():
+    """Gather all TODOs and export to JSON."""
+    all_users_data = {}
 
-    Args:
-        employee_id (int): The ID of the employee (used as the dict key).
-        username (str): The employee's username.
-        todos (list): List of task dictionaries.
-    """
-    data = {
-        str(employee_id): [
+    users = fetch_all_users()
+
+    for user in users:
+        user_id = str(user.get("id"))
+        username = user.get("username")
+        todos = fetch_user_todos(user_id)
+
+        all_users_data[user_id] = [
             {
+                "username": username,
                 "task": task.get("title"),
-                "completed": task.get("completed"),
-                "username": username
+                "completed": task.get("completed")
             }
             for task in todos
         ]
-    }
 
-    filename = f"{employee_id}.json"
+    filename = "todo_all_employees.json"
     try:
-        # Added 'indent=4' for readability, but kept line short
-        with open(filename, "w", encoding="utf-8") as jsonfile:
-            json.dump(data, jsonfile, indent=4)
+        with open(filename, "w", encoding="utf-8") as json_file:
+            json.dump(all_users_data, json_file, indent=4)
     except IOError as e:
         print(f"Error writing to file {filename}: {e}", file=sys.stderr)
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: ./2-export_to_JSON.py <employee_id>", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        employee_id = int(sys.argv[1])
-    except ValueError:
-        print("Error: Employee ID must be an integer.", file=sys.stderr)
-        sys.exit(1)
-
-    user_info, todos_info = fetch_employee_data(employee_id)
-    username = user_info.get("username")
-    export_to_json(employee_id, username, todos_info)
+    main()
